@@ -1,5 +1,5 @@
 # 🎓 SmartSched AI  
-### AI-Based Academic Timetable Generation and Conflict Resolution System
+### AI-Based Academic Timetable Generation System
 
 ---
 
