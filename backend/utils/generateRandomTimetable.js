@@ -16,8 +16,13 @@ const generateRandomTimetable = (subjects, rooms, groups) => {
       timetable.push({
         groupId: group._id,
         subjectId: subject._id,
-        lecturerId: subject.lecturerId,
+        lecturerId: subject.lecturerId._id,      // ✅ explicit ID
         roomId: room._id,
+
+        subject: subject,
+        room: room,
+        lecturer: subject.lecturerId,            // ✅ full populated lecturer
+
         day: slot.day,
         startTime: slot.start,
         endTime: slot.end

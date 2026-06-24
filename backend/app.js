@@ -15,5 +15,6 @@ app.use("/api/subjects", require("./routes/subjectRoutes"));
 app.use("/api/rooms", require("./routes/roomRoutes"));
 app.use("/api/timetable", require("./routes/timetableRoutes"));
 app.use("/api/reports", require("./routes/reportRoutes"));
+app.use("/api/departments", require("./routes/departmentRoutes"));
 
 module.exports = app;

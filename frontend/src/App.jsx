@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
@@ -7,16 +7,24 @@ import Lecturers from "./pages/Lecturers";
 import Rooms from "./pages/Rooms";
 import Subjects from "./pages/Subjects";
 import Timetable from "./pages/Timetable";
+import Departments from "./pages/Departments"; // ⭐ ADD
+
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <Routes>
+
+      {/* 🔐 PUBLIC ROUTE */}
       <Route path="/login" element={<Login />} />
 
+      {/* 🔄 REDIRECT ROOT */}
+      <Route path="/" element={<Navigate to="/dashboard" />} />
+
+      {/* 🏠 DASHBOARD */}
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute roles={["Admin", "Lecturer", "Student"]}>
             <Dashboard />
@@ -24,6 +32,7 @@ function App() {
         }
       />
 
+      {/* 👨‍🎓 STUDENTS */}
       <Route
         path="/students"
         element={
@@ -33,6 +42,7 @@ function App() {
         }
       />
 
+      {/* 👥 GROUPS */}
       <Route
         path="/student-groups"
         element={
@@ -42,6 +52,7 @@ function App() {
         }
       />
 
+      {/* 👩‍🏫 LECTURERS */}
       <Route
         path="/lecturers"
         element={
@@ -51,6 +62,17 @@ function App() {
         }
       />
 
+      {/* 🏢 DEPARTMENTS ⭐ */}
+      <Route
+        path="/departments"
+        element={
+          <ProtectedRoute roles={["Admin"]}>
+            <Departments />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* 🏫 ROOMS */}
       <Route
         path="/rooms"
         element={
@@ -60,6 +82,7 @@ function App() {
         }
       />
 
+      {/* 📚 SUBJECTS */}
       <Route
         path="/subjects"
         element={
@@ -69,6 +92,7 @@ function App() {
         }
       />
 
+      {/* 📅 TIMETABLE */}
       <Route
         path="/timetable"
         element={
@@ -77,6 +101,10 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* ❌ 404 */}
+      <Route path="*" element={<h1 className="p-10">Page Not Found</h1>} />
+
     </Routes>
   );
 }

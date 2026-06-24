@@ -6,6 +6,7 @@ const Lecturer = require("../models/Lecturer");
 
 const hasConflict = require("../utils/conflictChecker"); // advanced version
 const isOverlapping = require("../utils/timeValidator");
+const calculateFitness = require("../utils/fitnessCalculator");
 
 // normal scheduler (optional)
 const { generateTimetable } = require("../services/schedulerService");
@@ -193,7 +194,7 @@ exports.generate = async (req, res) => {
 // ==============================
 exports.generateAI = async (req, res) => {
   try {
-    const subjects = await Subject.find();
+    const subjects = await Subject.find().populate("lecturerId");
     const rooms = await Room.find();
     const groups = await StudentGroup.find();
 
@@ -255,6 +256,170 @@ exports.getGroupSchedule = async (req, res) => {
     }).populate("subjectId lecturerId roomId");
 
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getTimetableScore = async (req, res) => {
+  try {
+    const data = await Timetable.find()
+      .populate("subjectId")
+      .populate("roomId")
+      .populate("lecturerId");
+
+    const score = calculateFitness(data);
+
+    res.json({
+      score,
+      quality:
+        score > 80 ? "Excellent" :
+        score > 50 ? "Good" : "Poor"
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ============================================================
+// 🆕 GET AVAILABLE ROOMS for a given day/time
+// ============================================================
+exports.getAvailableRooms = async (req, res) => {
+  try {
+    const { day, startTime, endTime } = req.query;
+    if (!day || !startTime || !endTime) {
+      return res.status(400).json({ message: "Day, startTime, endTime required" });
+    }
+    const allRooms = await Room.find();
+    const busyRooms = await Timetable.find({ day, startTime, endTime }).distinct("roomId");
+    const freeRooms = allRooms.filter(r => !busyRooms.some(id => id.equals(r._id)));
+    res.json(freeRooms);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ============================================================
+// 🆕 GET AVAILABLE TIME SLOTS for a given lecturer/group/room on a day
+// ============================================================
+exports.getAvailableTimes = async (req, res) => {
+  try {
+    const { lecturerId, groupId, roomId, day } = req.query;
+    if (!day) {
+      return res.status(400).json({ message: "Day required" });
+    }
+    // Generate all possible slots (8-18, 2h steps)
+    const allSlots = require("../utils/timeSlotGenerator")();
+    // Fetch existing busy slots for any of the resources
+    const query = { day };
+    const orConditions = [];
+    if (lecturerId) orConditions.push({ lecturerId });
+    if (groupId) orConditions.push({ groupId });
+    if (roomId) orConditions.push({ roomId });
+    if (orConditions.length) query.$or = orConditions;
+
+    const busy = await Timetable.find(query).select("startTime endTime");
+
+    const freeSlots = allSlots.filter(slot => {
+      return !busy.some(b => 
+        require("../utils/timeValidator")(slot.start, slot.end, b.startTime, b.endTime)
+      );
+    });
+    res.json(freeSlots);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ============================================================
+// 🆕 CHECK DUPLICATE (subject already assigned to group)
+// ============================================================
+exports.checkDuplicate = async (req, res) => {
+  try {
+    const { groupId, subjectId } = req.query;
+    if (!groupId || !subjectId) {
+      return res.status(400).json({ message: "groupId and subjectId required" });
+    }
+    const exists = await Timetable.findOne({ groupId, subjectId });
+    res.json({ exists: !!exists });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ============================================================
+// 🆕 AI SUGGESTIONS for a single entry
+// ============================================================
+exports.suggestSlots = async (req, res) => {
+  try {
+    const { groupId, subjectId, lecturerId, roomId } = req.body;
+    if (!groupId || !subjectId || !lecturerId) {
+      return res.status(400).json({ message: "groupId, subjectId, lecturerId required" });
+    }
+
+    // Get subject and lecturer (populated)
+    const subject = await Subject.findById(subjectId).populate("lecturerId");
+    const lecturer = subject.lecturerId;
+    const group = await StudentGroup.findById(groupId);
+    const rooms = roomId ? [await Room.findById(roomId)] : await Room.find();
+
+    // Generate all possible slots
+    const allSlots = require("../utils/timeSlotGenerator")();
+
+    // Fetch existing timetable to check conflicts
+    const existing = await Timetable.find({});
+    const suggestions = [];
+
+    for (let slot of allSlots) {
+      for (let room of rooms) {
+        // Check hard conflicts
+        let conflict = false;
+        for (let entry of existing) {
+          if (entry.day !== slot.day) continue;
+          if (require("../utils/timeValidator")(slot.start, slot.end, entry.startTime, entry.endTime)) {
+            if (
+              entry.groupId.equals(groupId) ||
+              entry.lecturerId.equals(lecturerId) ||
+              entry.roomId.equals(room._id)
+            ) {
+              conflict = true;
+              break;
+            }
+          }
+        }
+        if (conflict) continue;
+
+        // Check lecturer's personal availability (if defined)
+        let available = true;
+        if (lecturer.availability && lecturer.availability.length) {
+          available = lecturer.availability.some(
+            av => av.day === slot.day && slot.start >= av.startTime && slot.end <= av.endTime
+          );
+        }
+        if (!available) continue;
+
+        // Check room type match (if subject has required type)
+        if (subject.requiredRoomType && room.type && subject.requiredRoomType !== room.type) {
+          continue; // skip this room for this slot
+        }
+
+        // If we reach here, slot is valid
+        suggestions.push({
+          day: slot.day,
+          startTime: slot.start,
+          endTime: slot.end,
+          roomId: room._id,
+          roomName: room.roomName,
+          // Optional: compute a soft score for ranking
+          score: 100
+        });
+      }
+    }
+
+    // Sort by some heuristic (e.g., lecturer preferred days/times)
+    // For simplicity we just return all
+    res.json(suggestions.slice(0, 10)); // limit to 10 suggestions
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

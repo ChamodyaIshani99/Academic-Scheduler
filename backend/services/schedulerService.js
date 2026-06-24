@@ -1,16 +1,14 @@
+// services/schedulerService.js
 const Timetable = require("../models/Timetable");
 const Subject = require("../models/Subject");
 const Room = require("../models/Room");
 const StudentGroup = require("../models/StudentGroup");
 const hasConflict = require("../utils/conflictChecker");
 const isLecturerAvailable = require("../utils/availabilityChecker");
+const generateTimeSlots = require("../utils/timeSlotGenerator");
 
-const timeSlots = [
-  { day: "Mon", start: "09:00", end: "11:00" },
-  { day: "Mon", start: "11:00", end: "13:00" },
-  { day: "Tue", start: "09:00", end: "11:00" },
-  { day: "Wed", start: "09:00", end: "11:00" }
-];
+// ===== Dynamic time slots =====
+const timeSlots = generateTimeSlots(); // default: Mon–Fri, 8–18, 2‑hour steps
 
 const generateTimetable = async () => {
   await Timetable.deleteMany();
@@ -21,11 +19,11 @@ const generateTimetable = async () => {
 
   for (let subject of subjects) {
     for (let group of groups) {
+      let assigned = false;
 
       for (let slot of timeSlots) {
         for (let room of rooms) {
-
-          // ✅ Check lecturer availability
+          // Check lecturer availability (from the Lecturer document)
           const available = isLecturerAvailable(
             subject.lecturerId.availability,
             slot.day,
@@ -35,7 +33,7 @@ const generateTimetable = async () => {
 
           if (!available) continue;
 
-          // ✅ Check advanced conflicts
+          // Check advanced conflicts (group, lecturer, room)
           const conflict = await hasConflict(
             group._id,
             subject.lecturerId._id,
@@ -56,9 +54,17 @@ const generateTimetable = async () => {
               endTime: slot.end
             });
 
+            assigned = true;
             break;
           }
         }
+        if (assigned) break;
+      }
+
+      if (!assigned) {
+        console.warn(
+          `Could not schedule subject "${subject.name}" for group "${group.groupId}"`
+        );
       }
     }
   }

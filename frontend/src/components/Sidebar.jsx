@@ -5,6 +5,7 @@ const navItems = [
   { label: "Dashboard", to: "/", icon: Home },
   { label: "Students", to: "/students", icon: Users },
   { label: "Student Groups", to: "/student-groups", icon: Users },
+  { label: "Departments", to: "/departments", icon: Building },
   { label: "Lecturers", to: "/lecturers", icon: BookOpen },
   { label: "Rooms", to: "/rooms", icon: Building },
   { label: "Subjects", to: "/subjects", icon: BookOpen },
@@ -31,9 +32,8 @@ export default function Sidebar() {
               <Link
                 key={item.to}
                 to={item.to}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${
-                  active ? "bg-slate-800 text-white shadow" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${active ? "bg-slate-800 text-white shadow" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 {item.label}
